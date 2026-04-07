@@ -1,2 +1,502 @@
 # STEPSV
 STEPS-V: automated step detection for vertical GPS time series, with example workflow, model files, and MATLAB postprocessing helpers.
+
+
+
+
+STEPS-V v1.0
+
+STEPS-V stands for Sequence-based Temporal Extraction of Persistent Steps.
+It is a research workflow for automated detection of persistent step-like
+offsets in vertical GPS time series.
+
+This release provides a single Python entry point for:
+  1. building datasets
+  2. training fold models
+  3. training a final model
+  4. running inference
+
+----------------------------------------------------------------------
+OVERVIEW
+----------------------------------------------------------------------
+
+Main script modes:
+
+  build_dataset
+      Build a training dataset from station .data files and a step epoch list
+
+  train_folds
+      Train fold-based validation models
+
+  train_final
+      Train a final model on the full dataset
+
+  inference
+      Run the packaged model or a user-specified checkpoint on new station files
+
+----------------------------------------------------------------------
+REPOSITORY CONTENTS
+----------------------------------------------------------------------
+
+Typical release contents include:
+
+  STEPSV_v1.00.py
+      Main STEPS-V script
+
+  STEPSV_final_model_epoch_070.pt
+      Recommended packaged inference model for STEPSV v1.0
+
+  STEPSV_scaler.pkl
+      Scaler matched to the packaged inference model
+
+  run_examples.m
+      MATLAB example workflows for reading inference outputs and selecting
+      step epochs
+
+  MATLAB helper scripts
+      Including load_inference_npz and pick_steps_from_prob
+
+----------------------------------------------------------------------
+REQUIREMENTS
+----------------------------------------------------------------------
+
+Quick install recommendation:
+
+For most users, the simplest approach is to create a dedicated Python
+environment for STEPS-V and install the required packages there.
+
+Example:
+
+  python -m venv stepsv_env
+  source stepsv_env/bin/activate
+  pip install --upgrade pip
+  pip install numpy scipy scikit-learn tqdm matplotlib
+
+Then install PyTorch using the version appropriate for your system.
+
+  CPU-only systems:
+      Install the CPU build of PyTorch
+
+  NVIDIA GPU / CUDA systems:
+      Install the CUDA-enabled PyTorch build matched to your driver
+      and CUDA compatibility
+
+After installation, verify that Python can import the required packages
+and that PyTorch is available.
+
+Recommended Python environment:
+
+  Python 3.10+
+  PyTorch
+  NumPy
+  scikit-learn
+  tqdm
+  matplotlib
+
+The script imports and uses:
+
+  torch
+  numpy
+  sklearn.preprocessing.RobustScaler
+  tqdm
+  matplotlib
+
+MATLAB is not required to run the Python model itself, but it is used
+in the example postprocessing workflow provided with the release.
+
+The inference output files are intended to be read by:
+
+  load_inference_npz
+  pick_steps_from_prob
+
+Example end-to-end MATLAB workflows are provided in:
+
+  run_examples.m
+
+----------------------------------------------------------------------
+INPUT FILE FORMATS
+----------------------------------------------------------------------
+
+Station time series files:
+
+Station files must be whitespace-delimited ASCII files with four columns:
+
+ [ decimal_year  displacement  uncertainty  antenna_correction]
+
+Where:
+
+  decimal_year
+      Decimal-year time coordinate
+
+  displacement
+      Vertical displacement time series (detrended)
+
+  uncertainty
+      Per-epoch uncertainty
+
+  antenna_correction
+      Currently reserved for file-format compatibility and future
+      STEPS-V development
+
+
+IMPORTANT:
+
+The displacement column is expected to contain preprocessed vertical
+displacement values prepared for STEPS-V. In the standard STEPSV v1.0
+workflow, inputs are detrended, cleaned for outliers, and corrected for
+NTAOL effects before dataset building or inference.
+
+
+
+Note on column 4:
+
+The fourth column is currently not used by the model.
+It is retained for compatibility with the broader STEPS-V file structure
+and future development.
+At present, it may contain any value.
+
+
+----------------------------------------------------------------------
+CORE WORKFLOW
+----------------------------------------------------------------------
+
+1. Build a dataset
+
+Use build_dataset to read station files, associate them with labeled
+step epochs, and save a PyTorch dataset plus metadata and scaler.
+
+Example:
+
+  python STEPSV_v1.00.py --mode build_dataset \
+    --data_dir ./ML_train_stats \
+    --step_epochs_file ./ML_step_epochs.txt \
+    --dataset_out ./train_v1_dataset.pt \
+    --metadata_out ./metadata_v1.npy \
+    --scaler_out ./STEPSV_scaler.pkl \
+    --apply_scaling 1 \
+    --make_scaler 1
+
+Outputs:
+
+  train_v1_dataset.pt
+      Serialized PyTorch dataset
+
+  metadata_v1.npy
+      Metadata including station names
+
+  STEPSV_scaler.pkl
+      Fitted scaler bundle
+
+2. Train fold models
+
+Use train_folds to train fold-based validation models.
+
+Example:
+
+  python STEPSV_v1.00.py --mode train_folds \
+    --dataset_pt ./train_v1_dataset.pt \
+    --train_out_dir ./models_v1_folds \
+    --version_tag STEPSV_v1 \
+    --k_folds 5 \
+    --num_epochs 200 \
+    --train_batch_size 64 \
+    --val_batch_size 64 \
+    --linear_size 16 \
+    --hidden_size 32 \
+    --num_layers 1 \
+    --dropout 0 \
+    --bidirectional 1 \
+    --max_length 5500 \
+    --pad_start 0 \
+    --pad_end 0
+
+Typical outputs include:
+
+  *_foldXX_best.pt
+  *_foldXX_last.pt
+  *_foldXX_epoch####.pt
+  fold loss CSV files
+
+3. Train a final model
+
+Use train_final to train a final model on the full dataset or with an
+optional validation split.
+
+Example:
+
+  python STEPSV_v1.00.py --mode train_final \
+    --dataset_pt ./train_v1_dataset.pt \
+    --train_out_dir ./models_v1_final \
+    --version_tag STEPSV_v1 \
+    --num_epochs 200 \
+    --train_batch_size 64 \
+    --val_batch_size 64 \
+    --linear_size 16 \
+    --hidden_size 32 \
+    --num_layers 1 \
+    --dropout 0 \
+    --bidirectional 1 \
+    --max_length 5500 \
+    --pad_start 0 \
+    --pad_end 0
+
+Typical outputs include:
+
+  *_final_best.pt
+  *_final_ckpt.pt
+  *_final_epoch####.pt
+  final loss CSV files
+
+4. Run inference
+
+The recommended packaged inference model for STEPSV v1.0 is:
+
+  ./STEPSV_final_model_epoch_070.pt
+
+The matching scaler is:
+
+  ./STEPSV_scaler.pkl
+
+Example:
+
+  python3 STEPSV_v1.00.py \
+    --mode inference \
+    --data_dir "./GPS_data" \
+    --output_dir "./example_inference_out" \
+    --model "./STEPSV_final_model_epoch_070.pt" \
+    --scaler_path "./STEPSV_scaler.pkl" \
+    --apply_scaling 1 \
+    --max_length 5500 \
+    --pad_start 0 \
+    --pad_end 0 \
+    --linear_size 16 \
+    --hidden_size 32 \
+    --num_layers 1 \
+    --dropout 0 \
+    --bidirectional 1 \
+    --mc_samples 0 \
+    --infer_batch_size 128 \
+    --infer_workers 4
+
+----------------------------------------------------------------------
+INFERENCE OUTPUTS
+----------------------------------------------------------------------
+
+Inference writes one NumPy .npz file per station to the specified
+output directory.
+
+File naming:
+
+  STATION_inference.npz
+
+These files contain:
+
+  time
+      Decimal-year time vector
+
+  prob
+      Model step probability time series
+
+  prob_std
+      Optional probability uncertainty when Monte Carlo dropout is enabled
+
+----------------------------------------------------------------------
+MATLAB POSTPROCESSING WORKFLOW
+----------------------------------------------------------------------
+
+The intended MATLAB postprocessing workflow is:
+
+  1. Read the inference .npz file using load_inference_npz
+  2. Select step epochs from the probability series using pick_steps_from_prob
+  3. Use run_examples.m as a reference for end-to-end usage
+
+In other words, inference produces probability time series, and MATLAB
+postprocessing converts those probability outputs into final candidate
+step epochs.
+
+----------------------------------------------------------------------
+RECOMMENDED STEPSV v1.0 INFERENCE SETTINGS
+----------------------------------------------------------------------
+
+The examples above reflect the practical STEPSV v1.0 workflow used in
+testing and evaluation.
+
+Recommended inference configuration:
+
+  linear_size   = 16
+  hidden_size   = 32
+  num_layers    = 1
+  dropout       = 0
+  bidirectional = 1
+  max_length    = 5500
+  pad_start     = 0
+  pad_end       = 0
+  mc_samples    = 0
+
+The checkpoint, scaler, and feature configuration must remain consistent.
+
+----------------------------------------------------------------------
+SELECTED COMMAND-LINE ARGUMENTS
+----------------------------------------------------------------------
+
+Shared / common arguments:
+
+  --mode
+      One of: build_dataset, train_folds, train_final, inference
+
+  --data_dir
+      Input directory containing station .data files
+
+  --max_length
+      Maximum sequence length used for padding or truncation
+
+  --apply_scaling
+      Whether to apply scaling
+
+  --scaler_path
+      Path to scaler file
+
+Dataset building arguments:
+
+  --step_epochs_file
+      Labeled step epoch file
+
+  --dataset_out
+      Output dataset .pt
+
+  --metadata_out
+      Output metadata .npy
+
+  --make_scaler
+      Whether to create a new scaler
+
+  --scaler_out
+      Output scaler path
+
+  --n_workers
+      Station loading workers
+
+Training arguments:
+
+  --dataset_pt
+      Input dataset .pt
+
+  --train_out_dir
+      Output directory for checkpoints and logs
+
+  --version_tag
+      Prefix or tag used in saved outputs
+
+  --num_epochs
+      Number of training epochs
+
+  --train_batch_size
+      Training batch size
+
+  --val_batch_size
+      Validation batch size
+
+  --linear_size
+      Linear input projection size
+
+  --hidden_size
+      LSTM hidden size
+
+  --num_layers
+      Number of LSTM layers
+
+  --dropout
+      Dropout value
+
+  --bidirectional
+      1 for bidirectional, 0 otherwise
+
+Inference arguments:
+
+  --model
+      Checkpoint path for inference
+
+  --output_dir
+      Output directory for .npz inference results
+
+  --infer_batch_size
+      Inference batch size
+
+  --infer_workers
+      Inference DataLoader workers
+
+  --mc_samples
+      Number of Monte Carlo dropout samples
+
+----------------------------------------------------------------------
+OUTPUT CONSISTENCY
+----------------------------------------------------------------------
+
+For reliable inference, keep the following matched:
+
+  model checkpoint
+  scaler
+  feature definition
+  sequence length settings used in deployment
+
+Changing any of these may change output behavior or break compatibility.
+
+----------------------------------------------------------------------
+GPU / CPU NOTES
+----------------------------------------------------------------------
+
+  The script can run on CPU or GPU.
+  GPU is recommended for faster inference and training when CUDA-enabled
+  PyTorch is available.
+  Inference behavior can still be controlled through the command-line
+  options exposed by the script.
+
+----------------------------------------------------------------------
+EXAMPLE RELEASE USAGE
+----------------------------------------------------------------------
+
+A minimal typical release usage pattern is:
+
+  1. Place new station .data files in ./GPS_data
+  2. Run inference using the packaged model and scaler
+  3. Read the generated .npz files in MATLAB
+  4. Convert probability outputs to step candidates using pick_steps_from_prob
+
+----------------------------------------------------------------------
+LIMITATIONS
+----------------------------------------------------------------------
+
+  STEPS-V is a research workflow, not a turnkey operational guarantee.
+  The fourth input column is reserved but currently unused by the model.
+  Probability outputs still require postprocessing choices such as
+  thresholding and minimum separation.
+  Results should be checked in the context of the specific GPS network,
+  data quality, and scientific application.
+
+----------------------------------------------------------------------
+DISCLAIMER
+----------------------------------------------------------------------
+
+STEPS-V is provided as a research tool for automated step detection in
+vertical GPS time series. Model outputs should be independently reviewed
+before scientific, operational, engineering, or other decision-making use.
+Users are responsible for validating results within their own workflow.
+
+----------------------------------------------------------------------
+CITATION / ATTRIBUTION
+----------------------------------------------------------------------
+
+If you distribute or build on this release, retain attribution to:
+
+  Zachary M. Young, PhD
+  ORCiD: https://orcid.org/0000-0002-5487-9183
+  
+For formal scholarly use, cite the associated STEPS-V manuscript or
+related documentation when available.
+
+
+
+
+
+
+
