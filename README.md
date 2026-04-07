@@ -16,6 +16,8 @@ This release provides a single Python entry point for:
   3. training a final model
   4. running inference
 
+Addition model checkpoints or synthetics used to develop the model are available by request. 
+
 ----------------------------------------------------------------------
 OVERVIEW
 ----------------------------------------------------------------------
