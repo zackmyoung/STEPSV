@@ -83,8 +83,8 @@ Train fold models:
     --version_tag STEPSV_v1 \
     --k_folds 5 \
     --num_epochs 200 \
-    --train_batch_size 64 \
-    --val_batch_size 64 \
+    --train_batch_size 256 \
+    --val_batch_size 256 \
     --linear_size 16 \
     --hidden_size 32 \
     --num_layers 1 \
@@ -100,8 +100,8 @@ Train final model:
     --train_out_dir ./models_v1_final \
     --version_tag STEPSV_v1 \
     --num_epochs 200 \
-    --train_batch_size 64 \
-    --val_batch_size 64 \
+    --train_batch_size 256 \
+    --val_batch_size 256 \
     --linear_size 16 \
     --hidden_size 32 \
     --num_layers 1 \
