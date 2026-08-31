@@ -197,6 +197,11 @@ At present, it may contain any value.
 CORE WORKFLOW
 ----------------------------------------------------------------------
 
+The command-line parser contains general-purpose defaults. The settings
+shown below document the STEPS-V v1.0 configuration used for the analyses
+reported in Young et al. Users reproducing the published analysis should
+use these settings rather than relying on parser defaults.
+
 1. Build a dataset
 
 Use build_dataset to read station files, associate them with labeled
@@ -224,28 +229,60 @@ Outputs:
   STEPSV_scaler.pkl
       Fitted scaler bundle
 
+
 2. Train fold models
 
-Use train_folds to train fold-based validation models.
+The published cross-validation analysis used five folds constructed from
+the training dataset. Training used two GPUs with PyTorch DistributedDataParallel.
 
-Example:
+Published STEPS-V v1.0 fold-training configuration:
 
-  python STEPSV_v1.00.py --mode train_folds \
+  torchrun --standalone --nproc_per_node=2 STEPSV_v1.00.py \
+    --mode train_folds \
     --dataset_pt ./train_v1_dataset.pt \
     --train_out_dir ./models_v1_folds \
+    --scaler_file ./STEPSV_scaler.pkl \
     --version_tag STEPSV_v1 \
     --k_folds 5 \
+    --fold_seed 1234 \
+    --val_fraction 0.00 \
     --num_epochs 200 \
+    --learning_rate 5e-4 \
+    --weight_decay 1e-4 \
     --train_batch_size 256 \
     --val_batch_size 256 \
+    --train_workers 12 \
+    --pin_memory 1 \
+    --prefetch_factor 2 \
+    --persistent_workers 1 \
+    --max_length 5500 \
+    --pad_start 0 \
+    --pad_end 0 \
     --linear_size 16 \
     --hidden_size 32 \
     --num_layers 1 \
     --dropout 0 \
     --bidirectional 1 \
-    --max_length 5500 \
-    --pad_start 0 \
-    --pad_end 0
+    --pos_weight 1 \
+    --ddp --ddp_backend nccl \
+    --amp 0 \
+    --compile 0 \
+    --bucket_by_length 1 \
+    --bucket_num_buckets 200 \
+    --bucket_shuffle 1 \
+    --bucket_shuffle_batches 1 \
+    --bucket_drop_last 1 \
+    --seed 1234 \
+    --use_lr_scheduler 1 \
+    --lr_scheduler plateau \
+    --lr_factor 0.5 \
+    --lr_patience 1000 \
+    --lr_threshold 0.01 \
+    --lr_threshold_mode rel \
+    --lr_cooldown 5 \
+    --lr_min_lr 1e-6 \
+    --lr_eps 1e-8 \
+    --lr_monitor val
 
 Typical outputs include:
 
@@ -254,45 +291,83 @@ Typical outputs include:
   *_foldXX_epoch####.pt
   fold loss CSV files
 
-3. Train a final model
 
-Use train_final to train a final model on the full dataset or with an
-optional validation split.
+3. Train the final model
 
-Example:
+The final model was trained using the complete training dataset while the
+separate validation dataset was used for evaluation during training. The
+validation dataset was not included in model fitting.
 
-  python STEPSV_v1.00.py --mode train_final \
+Published STEPS-V v1.0 final-training configuration:
+
+  torchrun --standalone --nproc_per_node=2 STEPSV_v1.00.py \
+    --mode train_final \
     --dataset_pt ./train_v1_dataset.pt \
+    --val_dataset_pt ./validation_v1_dataset.pt \
     --train_out_dir ./models_v1_final \
+    --scaler_file ./STEPSV_scaler.pkl \
     --version_tag STEPSV_v1 \
+    --val_fraction 0.00 \
     --num_epochs 200 \
+    --learning_rate 5e-4 \
+    --weight_decay 1e-4 \
     --train_batch_size 256 \
     --val_batch_size 256 \
+    --train_workers 12 \
+    --pin_memory 1 \
+    --prefetch_factor 2 \
+    --persistent_workers 1 \
+    --max_length 5500 \
+    --pad_start 0 \
+    --pad_end 0 \
     --linear_size 16 \
     --hidden_size 32 \
     --num_layers 1 \
     --dropout 0 \
     --bidirectional 1 \
-    --max_length 5500 \
-    --pad_start 0 \
-    --pad_end 0
+    --pos_weight 1 \
+    --ddp --ddp_backend nccl \
+    --amp 0 \
+    --compile 0 \
+    --bucket_by_length 1 \
+    --bucket_num_buckets 200 \
+    --bucket_shuffle 1 \
+    --bucket_shuffle_batches 1 \
+    --bucket_drop_last 1 \
+    --seed 1234 \
+    --use_lr_scheduler 0 \
+    --lr_scheduler plateau \
+    --lr_factor 0.5 \
+    --lr_patience 10000 \
+    --lr_threshold 0.01 \
+    --lr_threshold_mode rel \
+    --lr_cooldown 5 \
+    --lr_min_lr 1e-6 \
+    --lr_eps 1e-8 \
+    --lr_monitor val
 
-Typical outputs include:
-
-  *_final_best.pt
-  *_final_ckpt.pt
-  *_final_epoch####.pt
-  final loss CSV files
-
-4. Run inference
-
-The recommended packaged inference model for STEPSV v1.0 is:
+The preferred packaged checkpoint associated with the published analysis
+is the epoch-70 solution:
 
   ./STEPSV_final_model_epoch_070.pt
 
 The matching scaler is:
 
   ./STEPSV_scaler.pkl
+
+
+4. Run inference
+
+The recommended packaged inference model for STEPS-V v1.0 is:
+
+  ./STEPSV_final_model_epoch_070.pt
+
+The matching scaler is:
+
+  ./STEPSV_scaler.pkl
+
+The published STEPS-V analysis used deterministic inference. Dropout and
+Monte Carlo dropout were not used.
 
 Example:
 
@@ -314,6 +389,7 @@ Example:
     --mc_samples 0 \
     --infer_batch_size 128 \
     --infer_workers 4
+
 
 ----------------------------------------------------------------------
 INFERENCE OUTPUTS
